@@ -1,0 +1,12 @@
+{
+  "name": "msp-provjera",
+  "version": "1.0.0",
+  "private": true,
+  "description": "MSP Provjera — provjera blizine minski sumnjivih područja u BiH (snapshot podataka 2024-07-31). NIJE ZA NAVIGACIJU.",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
