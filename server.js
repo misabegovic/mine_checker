@@ -6,11 +6,20 @@ const path = require('path');
 const zlib = require('zlib');
 
 const PORT = process.env.PORT || 3000;
-const INDEX = path.join(__dirname, 'index.html');
 
-// index.html se učita i gzipuje jednom pri startu (2,2 MB → ~stotinjak KB)
-const raw = fs.readFileSync(INDEX);
-const gzipped = zlib.gzipSync(raw, { level: 9 });
+// Ruta → {fajl, content-type}. Sve se učita i gzipuje jednom pri startu.
+const ROUTES = {
+  '/':                 { file: 'index.html',       type: 'text/html; charset=utf-8' },
+  '/index.html':       { file: 'index.html',       type: 'text/html; charset=utf-8' },
+  '/minesweeper':      { file: 'minesweeper.html', type: 'text/html; charset=utf-8' },
+  '/minesweeper.html': { file: 'minesweeper.html', type: 'text/html; charset=utf-8' },
+  '/msp_data.json':    { file: 'msp_data.json',    type: 'application/json; charset=utf-8' },
+};
+
+for (const route of Object.values(ROUTES)) {
+  route.raw = fs.readFileSync(path.join(__dirname, route.file));
+  route.gz = zlib.gzipSync(route.raw, { level: 9 });
+}
 
 const server = http.createServer((req, res) => {
   if (req.method !== 'GET' && req.method !== 'HEAD') {
@@ -22,10 +31,16 @@ const server = http.createServer((req, res) => {
     return res.end('ok');
   }
 
+  const route = ROUTES[req.url.split('?')[0]];
+  if (!route) {
+    res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+    return res.end('404');
+  }
+
   const acceptsGzip = /\bgzip\b/.test(req.headers['accept-encoding'] || '');
-  const body = acceptsGzip ? gzipped : raw;
+  const body = acceptsGzip ? route.gz : route.raw;
   const headers = {
-    'Content-Type': 'text/html; charset=utf-8',
+    'Content-Type': route.type,
     'Content-Length': body.length,
     'Cache-Control': 'public, max-age=3600',
     'Vary': 'Accept-Encoding',

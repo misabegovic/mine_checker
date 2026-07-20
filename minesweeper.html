@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="bs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>MSP Minesweeper — igra na stvarnim podacima</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+:root{
+  --field:#12140F; --panel:#1C1F17; --line:#2E3327;
+  --paper:#EDEADF; --muted:#9AA08C;
+  --sign:#C8102E; --sign-dark:#8F0A20;
+  --safe:#4C7A3F;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:var(--field); color:var(--paper);
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  display:flex; flex-direction:column; min-height:100dvh;
+}
+header{
+  padding:14px 16px 10px; border-bottom:3px solid var(--sign);
+  display:flex; align-items:baseline; gap:12px; flex-wrap:wrap;
+}
+h1{
+  font-size:clamp(20px,4.5vw,26px); font-weight:800;
+  text-transform:uppercase; letter-spacing:.14em;
+}
+h1 .accent{color:var(--sign)}
+h1 a{color:inherit; text-decoration:none}
+.datestamp{
+  font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  font-size:12px; color:var(--muted); letter-spacing:.05em;
+}
+.stats{
+  display:flex; gap:0; border-bottom:1px solid var(--line);
+  font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px;
+}
+.stats div{flex:1; padding:8px 16px; border-right:1px solid var(--line)}
+.stats div:last-child{border-right:none}
+.stats b{display:block; font-size:16px; color:var(--paper); font-weight:700}
+.stats span{color:var(--muted); text-transform:uppercase; letter-spacing:.08em; font-size:10px}
+#map{flex:1; min-height:52dvh; background:#0B0C09}
+.controls{
+  padding:12px 16px; display:flex; gap:10px; flex-wrap:wrap; align-items:center;
+  border-top:1px solid var(--line); background:var(--panel);
+}
+button{
+  appearance:none; border:none; cursor:pointer;
+  background:var(--paper); color:var(--field);
+  font:inherit; font-weight:800; text-transform:uppercase; letter-spacing:.1em;
+  font-size:14px; padding:14px 20px; border-radius:4px;
+}
+button:hover{background:#fff}
+button:focus-visible{outline:3px solid var(--sign); outline-offset:2px}
+button.toggle[aria-pressed="true"]{background:var(--sign); color:#fff}
+.hint{width:100%; font-size:12px; color:var(--muted)}
+a.back{color:var(--muted); font-size:13px; text-decoration:underline}
+a.back:hover{color:var(--paper)}
+#verdict{padding:0 16px 16px; background:var(--panel)}
+.sign{
+  border-radius:6px; padding:20px 18px; display:none;
+  align-items:center; gap:16px;
+}
+.sign.show{display:flex}
+.sign svg{flex:none; width:52px; height:52px}
+.sign .txt{min-width:0}
+.sign h2{
+  font-size:clamp(18px,4.5vw,24px); font-weight:900;
+  text-transform:uppercase; letter-spacing:.12em; line-height:1.2;
+}
+.sign p{margin-top:6px; font-size:14px; line-height:1.45}
+.sign--danger{background:var(--sign); color:#fff; border:3px solid #fff; box-shadow:0 0 0 3px var(--sign-dark)}
+.sign--win{background:var(--safe); color:#fff; border:3px solid #fff}
+footer{
+  padding:14px 16px 20px; border-top:3px solid var(--sign);
+  font-size:12px; color:var(--muted); line-height:1.6;
+}
+.leaflet-container{font:inherit}
+.cell-num{
+  display:flex; align-items:center; justify-content:center;
+  font-family:ui-monospace,Menlo,Consolas,monospace; font-weight:900;
+  font-size:15px; text-shadow:0 0 3px #000,0 0 3px #000,0 1px 2px #000;
+  pointer-events:none;
+}
+.cell-flag{font-size:16px; text-align:center; pointer-events:none; text-shadow:0 1px 2px #000}
+.cell-mine{font-size:15px; text-align:center; pointer-events:none}
+.n1{color:#7EB6FF}.n2{color:#8FE388}.n3{color:#FF8A8A}.n4{color:#C9A0FF}
+.n5{color:#FFC46B}.n6{color:#7FE0D6}.n7{color:#F2F2F2}.n8{color:#FF6B6B}
+</style>
+</head>
+<body>
+<header>
+  <h1><a href="/">MSP</a> <span class="accent">Minesweeper</span></h1>
+  <span class="datestamp">STVARNI PODACI · SNAPSHOT 2024-07-31 · NIJE ZA NAVIGACIJU</span>
+</header>
+
+<div class="stats">
+  <div><b id="stat-mines">—</b><span>mina u segmentu</span></div>
+  <div><b id="stat-flags">0</b><span>zastavica</span></div>
+  <div><b id="stat-sheet">—</b><span>JOG list</span></div>
+</div>
+
+<div id="map" role="application" aria-label="Minesweeper mreža na karti"></div>
+
+<div id="verdict">
+  <div id="sign-lose" class="sign sign--danger" role="alert">
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 2L1 21h22L12 2z" fill="#fff"/><path d="M12 5.5L4.1 19.5h15.8L12 5.5z" fill="#C8102E"/><circle cx="12" cy="14.2" r="2.6" fill="#fff"/><rect x="11.3" y="9" width="1.4" height="3.6" fill="#fff"/></svg>
+    <div class="txt">
+      <h2>BUM — pogodio si minu</h2>
+      <p>Ćelija koju si otkrio presijeca stvarni MSP poligon iz BHMAC snapshota. U stvarnosti nema drugog pokušaja — zato provjeravaj prije nego kročiš. <span class="dist" id="lose-detail"></span></p>
+    </div>
+  </div>
+  <div id="sign-win" class="sign sign--win" role="status">
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="#fff"/><path d="M7 12.5l3.2 3.2L17 9" stroke="#4C7A3F" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <div class="txt">
+      <h2>Segment očišćen</h2>
+      <p>Otkrio si sve sigurne ćelije. Deminerima za ovoliku površinu trebaju sedmice pažljivog rada — <span id="win-detail"></span></p>
+    </div>
+  </div>
+</div>
+
+<div class="controls">
+  <button id="btn-new">Nova igra</button>
+  <button id="btn-flag" class="toggle" aria-pressed="false">🚩 Način zastavice</button>
+  <a class="back" href="/">← nazad na MSP Provjeru</a>
+  <div class="hint">Lijevi klik / dodir otkriva ćeliju. Desni klik (ili uključi „način zastavice") označava sumnju. Mine su postavljene tačno tamo gdje mreža presijeca stvarne poligone minski sumnjivih područja.</div>
+</div>
+
+<footer>
+  Edukativna igra na stvarnim podacima o minski sumnjivim područjima BiH (snapshot 2024-07-31).
+  Ova stranica ni na koji način ne služi za procjenu stvarne sigurnosti terena.
+  Za sve stvarno: zvanična aplikacija „BH Mine Suspected Areas" i BHMAC — 122 / 121 / 033-253-800.
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+'use strict';
+
+const COLS = 14, ROWS = 14, CELL_M = 120;      // segment ~1,7 × 1,7 km
+const MIN_MINES = 16, MAX_MINES = 55;           // 8–28 % od 196 ćelija
+const MAX_TRIES = 80;
+
+let map, gridLayer, feats = [];
+let game = null; // {mines, adj, revealed, flagged, over, cells, sheet, mineCount}
+
+const $ = id => document.getElementById(id);
+
+function pointInPolygon(lng, lat, rings){
+  // even-odd ray casting preko svih prstenova (rupe se same ponište)
+  let inside = false;
+  for (const ring of rings){
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++){
+      const [xi, yi] = ring[i], [xj, yj] = ring[j];
+      if (((yi > lat) !== (yj > lat)) &&
+          (lng < (xj - xi) * (lat - yi) / (yj - yi) + xi)) inside = !inside;
+    }
+  }
+  return inside;
+}
+
+function featureBBox(f){
+  let w = Infinity, s = Infinity, e = -Infinity, n = -Infinity;
+  for (const ring of f.geometry.coordinates)
+    for (const [x, y] of ring){
+      if (x < w) w = x; if (x > e) e = x;
+      if (y < s) s = y; if (y > n) n = y;
+    }
+  return [w, s, e, n];
+}
+
+function buildGame(){
+  for (let attempt = 0; attempt < MAX_TRIES; attempt++){
+    const seed = feats[Math.floor(Math.random() * feats.length)];
+    const [bw, bs, be, bn] = seed.bbox;
+    const cLat = (bs + bn) / 2 + (Math.random() - .5) * .006;
+    const cLng = (bw + be) / 2 + (Math.random() - .5) * .008;
+
+    const dLat = CELL_M / 111320;
+    const dLon = CELL_M / (111320 * Math.cos(cLat * Math.PI / 180));
+    const west = cLng - COLS / 2 * dLon;
+    const north = cLat + ROWS / 2 * dLat;
+    const east = west + COLS * dLon;
+    const south = north - ROWS * dLat;
+
+    const cand = feats.filter(f => {
+      const [w, s, e, n] = f.bbox;
+      return e >= west && w <= east && n >= south && s <= north;
+    });
+    if (!cand.length) continue;
+
+    const mines = new Uint8Array(COLS * ROWS);
+    let mineCount = 0;
+    for (let r = 0; r < ROWS; r++){
+      for (let c = 0; c < COLS; c++){
+        const x0 = west + c * dLon, y0 = north - r * dLat;
+        // 5 tačaka po ćeliji: centar + 4 uvučena ugla
+        const pts = [
+          [x0 + .5 * dLon, y0 - .5 * dLat],
+          [x0 + .15 * dLon, y0 - .15 * dLat],
+          [x0 + .85 * dLon, y0 - .15 * dLat],
+          [x0 + .15 * dLon, y0 - .85 * dLat],
+          [x0 + .85 * dLon, y0 - .85 * dLat],
+        ];
+        outer:
+        for (const f of cand){
+          const [w, s, e, n] = f.bbox;
+          if (e < x0 || w > x0 + dLon || n < y0 - dLat || s > y0) continue;
+          for (const [px, py] of pts){
+            if (pointInPolygon(px, py, f.geometry.coordinates)){
+              mines[r * COLS + c] = 1; mineCount++;
+              break outer;
+            }
+          }
+        }
+      }
+    }
+    if (mineCount < MIN_MINES || mineCount > MAX_MINES) continue;
+
+    const adj = new Uint8Array(COLS * ROWS);
+    for (let r = 0; r < ROWS; r++)
+      for (let c = 0; c < COLS; c++){
+        if (mines[r * COLS + c]) continue;
+        let n = 0;
+        for (let dr = -1; dr <= 1; dr++)
+          for (let dc = -1; dc <= 1; dc++){
+            const rr = r + dr, cc = c + dc;
+            if (rr >= 0 && rr < ROWS && cc >= 0 && cc < COLS && mines[rr * COLS + cc]) n++;
+          }
+        adj[r * COLS + c] = n;
+      }
+
+    return {
+      mines, adj, mineCount,
+      revealed: new Uint8Array(COLS * ROWS),
+      flagged: new Uint8Array(COLS * ROWS),
+      over: false, won: false,
+      west, north, dLat, dLon,
+      sheet: seed.properties.s,
+      cells: [], marks: [],
+    };
+  }
+  return null;
+}
+
+function cellBounds(g, r, c){
+  const y0 = g.north - r * g.dLat, x0 = g.west + c * g.dLon;
+  return [[y0 - g.dLat, x0], [y0, x0 + g.dLon]];
+}
+
+function drawGrid(g){
+  gridLayer.clearLayers();
+  g.cells = []; g.marks = [];
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c < COLS; c++){
+      const rect = L.rectangle(cellBounds(g, r, c), {
+        color: '#2E3327', weight: 1,
+        fillColor: '#1C1F17', fillOpacity: .88,
+        interactive: true,
+      }).addTo(gridLayer);
+      rect.on('click', () => onCell(r, c));
+      rect.on('contextmenu', ev => {
+        L.DomEvent.stop(ev);
+        toggleFlag(r, c);
+      });
+      g.cells[r * COLS + c] = rect;
+      g.marks[r * COLS + c] = null;
+    }
+  const b = L.latLngBounds([g.north - ROWS * g.dLat, g.west], [g.north, g.west + COLS * g.dLon]);
+  map.fitBounds(b.pad(.04));
+}
+
+function setMark(g, idx, html, cls){
+  if (g.marks[idx]){ gridLayer.removeLayer(g.marks[idx]); g.marks[idx] = null; }
+  if (!html) return;
+  const r = Math.floor(idx / COLS), c = idx % COLS;
+  const [[s, w], [n, e]] = cellBounds(g, r, c);
+  g.marks[idx] = L.marker([(s + n) / 2, (w + e) / 2], {
+    interactive: false,
+    icon: L.divIcon({ className: '', html: `<div class="${cls}">${html}</div>`, iconSize: [24, 24], iconAnchor: [12, 12] }),
+  }).addTo(gridLayer);
+}
+
+function reveal(g, r0, c0){
+  const stack = [[r0, c0]];
+  while (stack.length){
+    const [r, c] = stack.pop();
+    const i = r * COLS + c;
+    if (g.revealed[i] || g.flagged[i]) continue;
+    g.revealed[i] = 1;
+    const n = g.adj[i];
+    g.cells[i].setStyle({ fillOpacity: 0, color: '#EDEADF', weight: .5, opacity: .35 });
+    if (n > 0) setMark(g, i, n, `cell-num n${n}`);
+    else if (n === 0)
+      for (let dr = -1; dr <= 1; dr++)
+        for (let dc = -1; dc <= 1; dc++){
+          const rr = r + dr, cc = c + dc;
+          if (rr >= 0 && rr < ROWS && cc >= 0 && cc < COLS && !g.revealed[rr * COLS + cc])
+            stack.push([rr, cc]);
+        }
+  }
+}
+
+function onCell(r, c){
+  const g = game;
+  if (!g || g.over) return;
+  const i = r * COLS + c;
+  if (g.revealed[i]) return;
+  if (flagMode || g.flagged[i]){ toggleFlag(r, c); return; }
+  if (g.mines[i]){ lose(g, i); return; }
+  reveal(g, r, c);
+  checkWin(g);
+}
+
+function toggleFlag(r, c){
+  const g = game;
+  if (!g || g.over) return;
+  const i = r * COLS + c;
+  if (g.revealed[i]) return;
+  g.flagged[i] = g.flagged[i] ? 0 : 1;
+  setMark(g, i, g.flagged[i] ? '🚩' : null, 'cell-flag');
+  $('stat-flags').textContent = g.flagged.reduce((a, b) => a + b, 0);
+}
+
+function lose(g, hitIdx){
+  g.over = true;
+  for (let i = 0; i < COLS * ROWS; i++){
+    if (g.mines[i]){
+      g.cells[i].setStyle({ fillColor: '#C8102E', fillOpacity: i === hitIdx ? .95 : .65, color: '#fff', weight: 1 });
+      setMark(g, i, '☠', 'cell-mine');
+    }
+  }
+  $('lose-detail').textContent = `U ovom segmentu od ~1,7 × 1,7 km bilo je ${g.mineCount} miniranih ćelija.`;
+  $('sign-lose').classList.add('show');
+}
+
+function checkWin(g){
+  for (let i = 0; i < COLS * ROWS; i++)
+    if (!g.mines[i] && !g.revealed[i]) return;
+  g.over = true; g.won = true;
+  for (let i = 0; i < COLS * ROWS; i++)
+    if (g.mines[i]) setMark(g, i, '🚩', 'cell-flag');
+  $('win-detail').textContent = `ovih ${g.mineCount} ćelija na listu ${g.sheet} u stvarnosti još čeka deminiranje.`;
+  $('sign-win').classList.add('show');
+}
+
+function newGame(){
+  $('sign-lose').classList.remove('show');
+  $('sign-win').classList.remove('show');
+  game = buildGame();
+  if (!game){
+    alert('Nije uspjelo generisanje segmenta — pokušaj ponovo.');
+    return;
+  }
+  drawGrid(game);
+  $('stat-mines').textContent = game.mineCount;
+  $('stat-flags').textContent = '0';
+  $('stat-sheet').textContent = game.sheet;
+  // startna pozicija: otkrij jednu sigurnu ćeliju s najmanje susjeda
+  let best = -1, bestN = 9;
+  for (let i = 0; i < COLS * ROWS; i++)
+    if (!game.mines[i] && game.adj[i] < bestN){ best = i; bestN = game.adj[i]; }
+  if (best >= 0) reveal(game, Math.floor(best / COLS), best % COLS);
+}
+
+let flagMode = false;
+$('btn-flag').addEventListener('click', e => {
+  flagMode = !flagMode;
+  e.currentTarget.setAttribute('aria-pressed', String(flagMode));
+});
+$('btn-new').addEventListener('click', newGame);
+
+map = L.map('map', { zoomSnap: .25 }).setView([44.2, 17.8], 8);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  maxZoom: 17, attribution: '© OpenStreetMap'
+}).addTo(map);
+gridLayer = L.layerGroup().addTo(map);
+
+fetch('msp_data.json')
+  .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+  .then(gj => {
+    feats = gj.features.filter(f => f.geometry && f.geometry.type === 'Polygon');
+    for (const f of feats) f.bbox = featureBBox(f);
+    newGame();
+  })
+  .catch(err => {
+    alert('Ne mogu učitati MSP podatke (msp_data.json): ' + err.message);
+  });
+</script>
+</body>
+</html>

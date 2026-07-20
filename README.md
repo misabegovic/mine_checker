@@ -36,11 +36,22 @@ node server.js          # http://localhost:3000
 python3 -m http.server  # http://localhost:8000/index.html
 ```
 
+## Rute
+
+| Ruta | Sadržaj |
+|---|---|
+| `/` | MSP Provjera — glavni alat |
+| `/minesweeper` | MSP Minesweeper — edukativna igra: nasumični segment karte (~1,7 × 1,7 km) postaje minesweeper tabla, mine su tačno tamo gdje mreža presijeca stvarne MSP poligone |
+| `/msp_data.json` | GeoJSON sa svih 7.974 poligona (koristi ga igrica) |
+| `/healthz` | Healthcheck (`ok`) |
+
 ## Struktura
 
 | Fajl | Uloga |
 |---|---|
 | `index.html` | Kompletan alat — karta, podaci, logika (2,2 MB) |
+| `minesweeper.html` | Minesweeper igra (učitava `msp_data.json`) |
+| `msp_data.json` | MSP poligoni ekstraktovani iz `index.html` |
 | `server.js` | Statički server (Node stdlib, bez dependency-ja) |
 | `package.json` | `npm start` → `node server.js`; Node ≥ 18 |
 | `railway.json` | Start komanda, healthcheck, restart policy |
